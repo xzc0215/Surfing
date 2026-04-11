@@ -1,0 +1,53 @@
+name: release
+
+on:
+  push:
+    paths:
+      - 'Surfing.json'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      isAlpha: false
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6.0.2
+        with:
+          submodules: recursive
+
+      - name: Get Version number
+        id: version
+        run: |
+          version=$(grep 'version=' module.prop | awk -F '=' '{print $2}' | sed 's/ (.*)//')
+          echo "TAG_NAME=${version}" >> $GITHUB_ENV
+          echo "Version extracted: ${version}"
+
+      - name: Run build.sh
+        run: sh build.sh
+
+      - name: Determine Tag Name
+        id: tag
+        run: echo "TAG_NAME=${{ env.TAG_NAME }}" >> $GITHUB_ENV
+
+      - name: Get Latest Changelog
+        id: changelog
+        run: |
+          latest_version=$(grep -m1 '^# v[0-9.]\+' changelog.md | sed 's/# v//')
+          sed -n "/^# v${latest_version}/,/^# v[0-9.]\+/p" changelog.md | sed -e "/^# v${latest_version}/d" -e "/^# v[0-9.]\+/d" > release_notes.txt
+          echo "# What's Changed" | cat - release_notes.txt > temp && mv temp release_notes.txt
+          echo "CHANGELOG=release_notes.txt" >> $GITHUB_ENV
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2.6.1
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          files: Surfing_${{ env.TAG_NAME }}_release.zip
+          generate_release_notes: false
+          body_path: release_notes.txt
